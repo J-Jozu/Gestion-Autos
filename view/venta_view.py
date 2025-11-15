@@ -1,0 +1,412 @@
+"""
+Vista para la gestión de ventas
+Incluye tabla, formularios y operaciones CRUD
+"""
+import customtkinter as ctk
+from tkinter import messagebox
+from controller.venta_controller import VentaController
+from controller.auto_controller import AutoController
+from controller.cliente_controller import ClienteController
+from utils.printer import pdf_generator
+from datetime import datetime
+
+class VentaView(ctk.CTkFrame):
+    """Vista de gestión de ventas"""
+    
+    def __init__(self, parent):
+        super().__init__(parent, fg_color="#F4F6F7")
+        
+        self.selected_venta = None
+        
+        # Configurar grid
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+        
+        # Crear componentes
+        self.create_header()
+        self.create_table()
+        self.create_buttons()
+        
+        # Cargar datos
+        self.load_ventas()
+    
+    def create_header(self):
+        """Crea el encabezado de la vista"""
+        header_frame = ctk.CTkFrame(self, fg_color="#FFFFFF", corner_radius=10)
+        header_frame.grid(row=0, column=0, sticky="ew", pady=(0, 20))
+        header_frame.grid_columnconfigure(2, weight=1)
+        
+        # Contenido del header con padding
+        content_frame = ctk.CTkFrame(header_frame, fg_color="transparent")
+        content_frame.pack(fill="both", padx=20, pady=15)
+        content_frame.grid_columnconfigure(1, weight=1)  # Columna del medio expansible
+        
+        # Barra de búsqueda
+        self.search_entry = ctk.CTkEntry(
+            content_frame,
+            placeholder_text="Buscar venta...",
+            width=300,
+            height=40,
+            border_width=1,
+            border_color="#E5E7EB",
+            fg_color="#F9FAFB",
+            corner_radius=8,
+            font=ctk.CTkFont(family="Inter", size=13)
+        )
+        self.search_entry.grid(row=0, column=0, padx=(0, 10))
+        
+        # Frame para los botones (alineados a la derecha)
+        buttons_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+        buttons_frame.grid(row=0, column=2, sticky="e")
+        
+        btn_nuevo = ctk.CTkButton(
+            buttons_frame,
+            text="➕ Nueva Venta",
+            command=self.show_form_nuevo,
+            width=130,
+            height=40,
+            fg_color="#10B981",
+            hover_color="#059669",
+            corner_radius=8
+        )
+        btn_nuevo.pack(side="left", padx=(0, 10))
+        
+        btn_imprimir = ctk.CTkButton(
+            buttons_frame,
+            text="🖨️ Imprimir",
+            command=self.generar_pdf,
+            width=130,
+            height=40,
+            fg_color="#6366F1",
+            hover_color="#4F46E5",
+            corner_radius=8
+        )
+        btn_imprimir.pack(side="left", padx=(0, 10))
+    
+    def create_table(self):
+        """Crea la tabla de ventas"""
+        table_frame = ctk.CTkFrame(self, fg_color="#FFFFFF", corner_radius=10)
+        table_frame.grid(row=1, column=0, sticky="nsew", pady=(0, 20))
+        table_frame.grid_columnconfigure(0, weight=1)
+        table_frame.grid_rowconfigure(1, weight=1)
+        
+        headers_frame = ctk.CTkFrame(table_frame, fg_color="#F9FAFB", corner_radius=0, height=45)
+        headers_frame.grid(row=0, column=0, sticky="ew")
+        headers_frame.grid_propagate(False)
+        
+        headers = ["ID", "Cliente", "Auto", "Fecha", "Monto", "Método de Pago", "Acciones"]
+        weights = [1, 3, 3, 2, 2, 2, 1]
+        
+        for i, (header, weight) in enumerate(zip(headers, weights)):
+            headers_frame.grid_columnconfigure(i, weight=weight)
+            label = ctk.CTkLabel(
+                headers_frame,
+                text=header,
+                font=ctk.CTkFont(family="Inter", size=12, weight="bold"),
+                text_color="#1F2937"
+            )
+            label.grid(row=0, column=i, padx=10, pady=12, sticky="w")
+        
+        self.table_scroll = ctk.CTkScrollableFrame(table_frame, fg_color="#FFFFFF")
+        self.table_scroll.grid(row=1, column=0, sticky="nsew")
+        self.table_scroll.grid_columnconfigure(0, weight=1)
+    
+    def create_buttons(self):
+        """Crea los botones de acción"""
+        # Los botones ahora están en el encabezado
+        pass
+    
+    def load_ventas(self):
+        """Carga las ventas en la tabla"""
+        for widget in self.table_scroll.winfo_children():
+            widget.destroy()
+        
+        success, result = VentaController.obtener_todas()
+        
+        if not success:
+            messagebox.showerror("Error", result)
+            return
+        
+        for i, venta in enumerate(result):
+            row_frame = ctk.CTkFrame(
+                self.table_scroll,
+                fg_color="#FFFFFF" if i % 2 == 0 else "#F9FAFB",
+                corner_radius=0
+            )
+            row_frame.grid(row=i, column=0, sticky="ew", pady=1)
+            row_frame.grid_columnconfigure(0, weight=1)
+            
+            row_frame.bind("<Button-1>", lambda e, v=venta: self.select_venta(v))
+            row_frame.bind("<Enter>", lambda e, rf=row_frame: rf.configure(fg_color="#DBEAFE"))
+            row_frame.bind("<Leave>", lambda e, rf=row_frame, idx=i: rf.configure(
+                fg_color="#FFFFFF" if idx % 2 == 0 else "#F9FAFB"
+            ))
+            
+            data_frame = ctk.CTkFrame(row_frame, fg_color="transparent")
+            data_frame.pack(fill="both", expand=True, padx=10, pady=5)
+            
+            weights = [1, 3, 3, 2, 2, 2, 1]
+            auto_info = f"{venta['auto_marca']} {venta['auto_modelo']} ({venta['auto_anio']})"
+            values = [
+                venta['id_venta'],
+                venta['cliente_nombre'],
+                auto_info,
+                str(venta['fecha_venta']),
+                f"${venta['monto']:,.2f}",
+                venta['metodo_pago']
+            ]
+            
+            # Configurar columnas
+            for col, weight in enumerate(weights[:-1]):
+                data_frame.grid_columnconfigure(col, weight=weight, minsize=50)
+            
+            # Crear celdas
+            for j, (value, weight) in enumerate(zip(values, weights[:-1])):
+                cell_frame = ctk.CTkFrame(data_frame, fg_color="transparent", height=35)
+                cell_frame.grid(row=0, column=j, sticky="nsew", padx=5)
+                cell_frame.grid_propagate(False)
+                
+                label = ctk.CTkLabel(
+                    cell_frame,
+                    text=str(value),
+                    font=ctk.CTkFont(family="Inter", size=12),
+                    text_color="#374151",
+                    anchor="center"
+                )
+                label.place(relx=0.5, rely=0.5, anchor="center")
+            
+            # Frame para botones de acción
+            actions_frame = ctk.CTkFrame(data_frame, fg_color="transparent", height=35)
+            actions_frame.grid(row=0, column=len(values), sticky="nsew", padx=5)
+            actions_frame.grid_propagate(False)
+            
+            buttons_container = ctk.CTkFrame(actions_frame, fg_color="transparent")
+            buttons_container.place(relx=0.5, rely=0.5, anchor="center")
+            
+            btn_eliminar = ctk.CTkButton(
+                buttons_container,
+                text="🗑️",
+                width=30,
+                height=30,
+                fg_color="#DC2626",
+                hover_color="#B91C1C",
+                corner_radius=8,
+                command=lambda v=venta: self.eliminar_venta(v)
+            )
+            btn_eliminar.pack(side="left", padx=2)
+    
+    def select_venta(self, venta):
+        """Selecciona una venta de la tabla"""
+        self.selected_venta = venta
+    
+    def show_form_nuevo(self):
+        """Muestra el formulario para crear una nueva venta"""
+        form_window = ctk.CTkToplevel(self)
+        form_window.title("Nueva Venta")
+        form_window.geometry("500x500")
+        form_window.resizable(False, False)
+        
+        form_window.transient(self)
+        form_window.grab_set()
+        
+        # Contenedor principal
+        main_frame = ctk.CTkFrame(form_window, fg_color="#F4F6F7")
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Título
+        title = ctk.CTkLabel(
+            main_frame,
+            text="Nueva Venta",
+            font=ctk.CTkFont(size=20, weight="bold"),
+            text_color="#2C3E50"
+        )
+        title.pack(pady=(0, 20))
+        
+        # Formulario
+        form_frame = ctk.CTkFrame(main_frame, fg_color="#FFFFFF", corner_radius=10)
+        form_frame.pack(fill="both", expand=True)
+        
+        # Obtener autos y clientes
+        success_autos, autos = AutoController.obtener_todos()
+        success_clientes, clientes = ClienteController.obtener_todos()
+        
+        if not success_autos or not success_clientes:
+            messagebox.showerror("Error", "No se pudieron cargar los datos necesarios")
+            form_window.destroy()
+            return
+        
+        # Cliente
+        label_cliente = ctk.CTkLabel(
+            form_frame,
+            text="Cliente:",
+            font=ctk.CTkFont(size=12),
+            text_color="#2E2E2E"
+        )
+        label_cliente.pack(anchor="w", padx=20, pady=(15, 5))
+        
+        clientes_dict = {f"{c['nombre']} (ID: {c['id_cliente']})": c['id_cliente'] for c in clientes}
+        cliente_var = ctk.StringVar()
+        cliente_combo = ctk.CTkComboBox(
+            form_frame,
+            values=list(clientes_dict.keys()),
+            variable=cliente_var,
+            height=35
+        )
+        cliente_combo.pack(fill="x", padx=20)
+        
+        # Auto
+        label_auto = ctk.CTkLabel(
+            form_frame,
+            text="Auto:",
+            font=ctk.CTkFont(size=12),
+            text_color="#2E2E2E"
+        )
+        label_auto.pack(anchor="w", padx=20, pady=(10, 5))
+        
+        autos_dict = {f"{a['marca']} {a['modelo']} {a['anio']} - ${a['precio']:,.2f}": a['id_auto'] for a in autos}
+        auto_var = ctk.StringVar()
+        auto_combo = ctk.CTkComboBox(
+            form_frame,
+            values=list(autos_dict.keys()),
+            variable=auto_var,
+            height=35
+        )
+        auto_combo.pack(fill="x", padx=20)
+        
+        # Monto
+        label_monto = ctk.CTkLabel(
+            form_frame,
+            text="Monto:",
+            font=ctk.CTkFont(size=12),
+            text_color="#2E2E2E"
+        )
+        label_monto.pack(anchor="w", padx=20, pady=(10, 5))
+        
+        monto_entry = ctk.CTkEntry(form_frame, height=35)
+        monto_entry.pack(fill="x", padx=20)
+        
+        # Método de pago
+        label_metodo = ctk.CTkLabel(
+            form_frame,
+            text="Método de Pago:",
+            font=ctk.CTkFont(size=12),
+            text_color="#2E2E2E"
+        )
+        label_metodo.pack(anchor="w", padx=20, pady=(10, 5))
+        
+        metodo_var = ctk.StringVar(value="Efectivo")
+        metodo_combo = ctk.CTkComboBox(
+            form_frame,
+            values=["Efectivo", "Tarjeta", "Transferencia"],
+            variable=metodo_var,
+            height=35
+        )
+        metodo_combo.pack(fill="x", padx=20)
+        
+        # Fecha
+        label_fecha = ctk.CTkLabel(
+            form_frame,
+            text="Fecha (YYYY-MM-DD):",
+            font=ctk.CTkFont(size=12),
+            text_color="#2E2E2E"
+        )
+        label_fecha.pack(anchor="w", padx=20, pady=(10, 5))
+        
+        fecha_entry = ctk.CTkEntry(form_frame, height=35)
+        fecha_entry.insert(0, datetime.now().strftime("%Y-%m-%d"))
+        fecha_entry.pack(fill="x", padx=20)
+        
+        # Botones
+        buttons_frame = ctk.CTkFrame(form_frame, fg_color="transparent")
+        buttons_frame.pack(pady=20)
+        
+        btn_guardar = ctk.CTkButton(
+            buttons_frame,
+            text="Guardar",
+            command=lambda: self.save_venta(
+                clientes_dict, cliente_var, autos_dict, auto_var,
+                monto_entry, metodo_var, fecha_entry, form_window
+            ),
+            font=ctk.CTkFont(size=14),
+            height=40,
+            width=120,
+            fg_color="#27AE60"
+        )
+        btn_guardar.pack(side="left", padx=10)
+        
+        btn_cancelar = ctk.CTkButton(
+            buttons_frame,
+            text="Cancelar",
+            command=form_window.destroy,
+            font=ctk.CTkFont(size=14),
+            height=40,
+            width=120,
+            fg_color="#95A5A6"
+        )
+        btn_cancelar.pack(side="left", padx=10)
+    
+    def save_venta(self, clientes_dict, cliente_var, autos_dict, auto_var, monto_entry, metodo_var, fecha_entry, window):
+        """Guarda la venta"""
+        # Obtener valores
+        cliente_key = cliente_var.get()
+        auto_key = auto_var.get()
+        monto = monto_entry.get().strip()
+        metodo_pago = metodo_var.get()
+        fecha = fecha_entry.get().strip()
+        
+        if not cliente_key or not auto_key:
+            messagebox.showerror("Error", "Debe seleccionar un cliente y un auto")
+            return
+        
+        id_cliente = clientes_dict[cliente_key]
+        id_auto = autos_dict[auto_key]
+        
+        success, result = VentaController.crear_venta(id_auto, id_cliente, monto, metodo_pago, fecha)
+        
+        if success:
+            messagebox.showinfo("Éxito", "Venta registrada correctamente")
+            window.destroy()
+            self.load_ventas()
+        else:
+            messagebox.showerror("Error", result)
+    
+    def eliminar_venta(self, venta):
+        """Elimina la venta seleccionada"""
+        
+        # Confirmar eliminación
+        confirm = messagebox.askyesno(
+            "Confirmar eliminación",
+            f"¿Está seguro de eliminar la venta ID {self.selected_venta['id_venta']}?"
+        )
+        
+        if not confirm:
+            return
+        
+        success, result = VentaController.eliminar_venta(self.selected_venta['id_venta'])
+        
+        if success:
+            messagebox.showinfo("Éxito", "Venta eliminada correctamente")
+            self.selected_venta = None
+            self.load_ventas()
+        else:
+            messagebox.showerror("Error", result)
+    
+    def generar_pdf(self):
+        """Genera un PDF de la venta seleccionada"""
+        if not self.selected_venta:
+            messagebox.showwarning("Advertencia", "Debe seleccionar una venta para generar el PDF")
+            return
+        
+        try:
+            filename = f"venta_{self.selected_venta['id_venta']}_comprobante.pdf"
+            output_path = pdf_generator.generate_venta_report(self.selected_venta, filename)
+            
+            open_pdf = messagebox.askyesno(
+                "PDF Generado",
+                f"Comprobante PDF generado correctamente en:\n{output_path}\n\n¿Desea abrir el archivo?"
+            )
+            
+            if open_pdf:
+                pdf_generator.open_pdf(output_path)
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al generar PDF: {str(e)}")
