@@ -1,5 +1,5 @@
 -- Script de creación de base de datos para el sistema de venta de autos
--- Compatible con MySQL 5.7+
+-- Compatible con MySQL 5.7+ y MariaDB 10.0+
 
 -- Crear base de datos
 CREATE DATABASE IF NOT EXISTS venta_autos_db;

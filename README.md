@@ -107,17 +107,23 @@ run.bat
 
 ### Linux / macOS:
 ```bash
-chmod +x run.sh
+# Primera vez - Instalación completa
+chmod +x install.sh run.sh
+./install.sh
+
+# Después - Solo ejecutar
 ./run.sh
 ```
 
 Los scripts automáticamente:
 - ✅ Crean el entorno virtual
 - ✅ Instalan dependencias
-- ✅ Verifican la configuración
+- ✅ Configuran directorios
 - ✅ Inician la aplicación
 
-📖 **Instalación detallada por sistema**: Ver `INSTALACION_MULTIPLATAFORMA.md`
+📖 **Guías de instalación**:
+- Windows: Ver `INSTALACION_MULTIPLATAFORMA.md`
+- Linux: Ver `LINUX_INSTALL.md`
 
 ---
 
